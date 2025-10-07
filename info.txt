@@ -1,0 +1,81 @@
+CPU Info:
+
+· /proc/stat - CPU usage percentages
+· /proc/cpuinfo - CPU model, cores
+· /proc/loadavg - system load
+
+GPU Info:
+
+. /sys/class/drm/card1/ 
+. /sys/class/drm/card2/ 
+
+Memory Info:
+
+· /proc/meminfo - total, free, cached memory
+· /proc/vmstat - virtual memory statistics
+
+Process Info:
+
+· /proc/pid/stat - individual process stats
+· /proc/pid/status - process memory usage
+· /proc/pid/io - process I/O statistics
+. 
+
+cpu template: infowrap cpu {flags}
+flags:
+/proc/cpuinfo model name = m 
+/proc/cpuinfo cores = c 
+/proc/cpuinfo siblings (threads) = t
+/sys/class/thermal/thermal_zone0/temp = h
+/proc/stat/ usage = u
+how to calculate usage: read /proc/stat in 2 different times, 4th number is idle
+usage% = [(total_diff) - (idle_diff)] * 100 / total_diff 
+/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq speed = s 
+
+`infowrap cpu muchts` would do it 
+
+##################
+###################################
+##################
+
+/proc/meminfo template: infowrap mem {flags}
+flags: 
+MemTotal = t 
+MemFree = f 
+MemAvailable = a 
+Cached = c 
+SwapTotal && SwapFree = s
+
+`infowrap mem facts` | Would print necessary info about ram, or maybe `mem full` can also be used
+
+##################
+###################################
+##################
+
+gpu template on /sys/class/drm/card1/device/ or card2/device/: infowrap gpu1 {flags}
+flags:
+mem_info_vram_total & mem_info_vram_usage = v 
+gpu_busy_percent (usage) = u 
+hwmon/hwmon*/power1_average and power1_cap_max (divide by 10^6) = p
+hwmon/hwmon*/temp1_input (divide by 10^3) = t
+hwmon/hwmon*/freq1_input (clock speed) hwmon/hwmon*/freq2_input (memclock) = c
+`lspci -v | grep Display` for dGPU name and `lspci -v | grep VGA for iGPU` = n 
+
+`infowrap gpu1 punctv` ig its ok
+##################
+###################################
+##################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
