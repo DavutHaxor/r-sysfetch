@@ -26,7 +26,7 @@ flags:
 /proc/cpuinfo model name = m 
 /proc/cpuinfo cores = c 
 /proc/cpuinfo siblings (threads) = t
-/sys/class/thermal/thermal_zone0/temp = h
+/sys/class/hwmon/hwmonX/temp1_input = h
 /proc/stat/ usage = u
 how to calculate usage: read /proc/stat in 2 different times, 4th number is idle
 usage% = [(total_diff) - (idle_diff)] * 100 / total_diff 
