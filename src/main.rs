@@ -1,5 +1,5 @@
 #![allow(unused)]
-use std::{char, collections::HashMap, env, fmt::Write, fs, thread, time};
+use std::{char, collections::HashMap, env, fmt::{format, Write}, fs, thread, time};
 
 fn main() {
     
@@ -19,21 +19,30 @@ fn main() {
     }
     // CPU section
     println!("CPU");    
-    println!("{}", cpu_model_name());
-    println!("Usage: {:.2}%", cpu_usage());
-    println!("Frequency: {:.1} GHz", cpu_freq());
-    println!("Temperature: {:.1} °C", cpu_temperature() / 1000.0);
-    println!("Cores: {}", cpu_cores());
-    println!("Threads: {}", cpu_threads());
+    println!("  {}", cpu_model_name());
+    println!("  Usage: {:.2}%", cpu_usage());
+    println!("  Frequency: {:.1} GHz", cpu_freq());
+    println!("  Temperature: {:.1} °C", cpu_temperature() / 1000.0);
+    println!("  Cores: {}", cpu_cores());
+    println!("  Threads: {}", cpu_threads());
 
     // MEM section
     println!("MEM");
-    println!("Total: {:.1} GB", mem_total());
-    println!("Free: {:.1} GB", mem_free());
-    println!("Available: {:.1} GB", mem_available());
+    println!("  Total: {:.1} GB", mem_total());
+    println!("  Free: {:.1} GB", mem_free());
+    println!("  Available: {:.1} GB", mem_available());
     let (swap_total, swap_free) = mem_swap_info();
-    print!("Swap Total: {:.1} GB\n Swap Free: {:.1} GB\n", swap_total, swap_free);
-
+    print!("  Swap Total: {:.1} GB\n  Swap Free: {:.1} GB\n", swap_total, swap_free);
+    
+    // GPU section
+    println!("GPU");
+    let (vram_total, vram_used) = gpu_vram('1');
+    print!("  VRAM Total: {:.2} GB\n  VRAM Used: {:.2} GB\n", vram_total, vram_used);
+    let (power_used, power_max) = gpu_power('1');
+    print!("  Power Used: {} Watts\n  Power Max: {} Watts\n", power_used, power_max);
+    println!("  Temperature: {} °C", gpu_temp('1'));
+    let (core_speed, mem_speed) = gpu_clocks('1');
+    print!("  Core Speed: {} MHz\n  Memory Speed: {} MHz\n", core_speed, mem_speed);
 
 
 }
@@ -223,33 +232,113 @@ fn mem_swap_info() -> (f64, f64) {
 
     (swap_total, swap_free)
 }
-// GPU Section
+
+
+
+// GPU Section 
 // v
-fn gpu_vram() {
-    
+fn gpu_vram(gpu_id: char) -> (f64, f64) {
+    let vram_total_path = format!("/sys/class/drm/card{}/device/mem_info_vram_total", gpu_id);
+    let vram_total = fs::read_to_string(&vram_total_path).ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|bytes| bytes as f64 / 1_000_000_000.0)
+        .unwrap_or(0.0);
+    let vram_used_path = format!("/sys/class/drm/card{}/device/mem_info_vram_usage", gpu_id);
+    let vram_used = fs::read_to_string(&vram_used_path).ok() 
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|bytes| bytes as f64 / 1_000_000_000.0)
+        .unwrap_or(0.0);
+    (vram_total, vram_used)
 }
 // u
-fn gpu_usage() {
-    
+fn gpu_usage(gpu_id: char) -> u8 {
+    let path = format!("/sys/class/drm/card{}/device/gpu_busy_percent", gpu_id);
+    match fs::read_to_string(&path) {
+        Ok(content) => content
+            .trim()
+            .parse::<u8>()
+            .unwrap_or(0),
+        Err(_) => 0,
+    }
 }
 // p
-fn gpu_power() {
-    
+fn gpu_power(gpu_id: char) -> (u64, u64) {
+    let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
+    let power_used = fs::read_dir(&base_path)
+        .ok()
+        .and_then(|mut entries| {
+            entries.find_map(|entry| {
+                let path = entry.ok()?.path();
+                let power_file = path.join("power1_average");
+                fs::read_to_string(power_file).ok()
+                    .and_then(|p| p.trim().parse::<u64>().ok())
+                    .map(|microwatts| microwatts as u64 / 1_000_000 )
+            })
+        })
+        .unwrap_or(0);
+
+    let power_max = fs::read_dir(&base_path)
+        .ok()
+        .and_then(|mut entries| {
+            entries.find_map(|entry| {
+                let path = entry.ok()?.path();
+                let power_file = path.join("power1_cap_max");
+                fs::read_to_string(power_file).ok()
+                    .and_then(|p| p.trim().parse::<u64>().ok())
+                    .map(|microwatts| microwatts as u64 / 1_000_000 )
+            })
+        })
+        .unwrap_or(0);
+
+    (power_used, power_max)
 }
 // t
-fn gpu_temp() {
-    
+fn gpu_temp(gpu_id: char) -> u64 {
+    let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
+    fs::read_dir(&base_path)
+        .ok()
+        .and_then(|mut entries| {
+            entries.find_map(|entry| {
+                let path = entry.ok()?.path();
+                let temp_file = path.join("temp1_input");
+                fs::read_to_string(temp_file).ok()
+                    .and_then(|temp| temp.trim().parse::<u64>().ok())
+                    .map(|celsius| celsius as u64 / 1000)
+            })
+        })
+        .unwrap_or(0)
 }
 // c
-fn gpu_clocks() {
-    
-}
-// n
-fn gpu_name() {
-    
-}
+fn gpu_clocks(gpu_id: char) -> (u64, u64) {
+    let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
+    let core_speed = fs::read_dir(&base_path)
+        .ok()
+        .and_then(|mut entries| {
+            entries.find_map(|entry| {
+                let path = entry.ok()?.path();
+                let power_file = path.join("freq1_input");
+                fs::read_to_string(power_file).ok()
+                    .and_then(|p| p.trim().parse::<u64>().ok())
+                    .map(|hertz| hertz as u64 / 1_000_000 )
+            })
+        })
+        .unwrap_or(0);
 
+    let mem_speed = fs::read_dir(&base_path)
+        .ok()
+        .and_then(|mut entries| {
+            entries.find_map(|entry| {
+                let path = entry.ok()?.path();
+                let power_file = path.join("freq2_input");
+                fs::read_to_string(power_file).ok()
+                    .and_then(|p| p.trim().parse::<u64>().ok())
+                    .map(|hertz| hertz as u64 / 1_000_000 )
+            })
+        })
+        .unwrap_or(0);
 
+    (core_speed, mem_speed) 
+}
 
 
 

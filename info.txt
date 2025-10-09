@@ -59,9 +59,11 @@ gpu_busy_percent (usage) = u
 hwmon/hwmon*/power1_average and power1_cap_max (divide by 10^6) = p
 hwmon/hwmon*/temp1_input (divide by 10^3) = t
 hwmon/hwmon*/freq1_input (clock speed) hwmon/hwmon*/freq2_input (memclock) = c
-`lspci -v | grep Display` for dGPU name and `lspci -v | grep VGA for iGPU` = n 
 
-`r-sysfetch gpu1 punctv` ig its ok
+
+
+
+`r-sysfetch gpu1 cuptv` ig its ok
 ##################
 ###################################
 ##################
