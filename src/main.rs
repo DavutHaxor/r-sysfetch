@@ -17,8 +17,16 @@ fn main() {
         let dev3 = &arguments[4];
         let args3: Vec<char> = arguments[5].chars().collect();
     }
+    // CPU section
+    println!("CPU");    
+    println!("{}", cpu_model_name());
+    println!("Usage: {:.2}%", cpu_usage());
+    println!("Frequency: {:.1} GHz", cpu_freq());
+    println!("Temperature: {:.1} °C", cpu_temperature() / 1000.0);
+    println!("Cores: {}", cpu_cores());
+    println!("Threads: {}", cpu_threads());
 
-    println!("{:.2}", cpu_usage());
+
 }
 
 // CPU Section
@@ -59,7 +67,7 @@ fn cpu_threads() -> String {
     }
 }
 // h for heat 
-fn cpu_temperature() -> String {
+fn cpu_temperature() -> f64 {
     let mut acpitz_temp = None;
     for i in 0..10 {
         let path = format!("/sys/class/hwmon/hwmon{}/name", i);
@@ -68,17 +76,17 @@ fn cpu_temperature() -> String {
             let name = name.trim();
             if name == "x86_pkg_temp" {
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
-                    return temp.trim().to_string();
+                    return temp.trim().parse::<f64>().unwrap_or(0.0);
                 }
             }
             else if name == "acpitz" && acpitz_temp.is_none() {
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
-                    acpitz_temp = Some(temp.trim().to_string());
+                    acpitz_temp = temp.trim().parse::<f64>().ok();
                 }
             }
         }
     }
-    acpitz_temp.unwrap_or_else(|| "Unknown".to_string())
+    acpitz_temp.unwrap_or(0.0)
 }
 // u
 fn cpu_usage() -> f64 {
@@ -111,8 +119,21 @@ fn cpu_usage() -> f64 {
     } else { 0.0 }
 }
 // s for speed
-fn cpu_freq() {
-    
+fn cpu_freq() -> f64 {
+    let threads = cpu_threads()
+        .parse::<usize>()
+        .unwrap_or(0);
+    let speeds: Vec<f64> = (0..threads)
+        .filter_map(|i| {
+            let path = format!("/sys/devices/system/cpu/cpu{}/cpufreq/scaling_cur_freq", i);
+            fs::read_to_string(&path).ok()
+                .and_then(|freq| freq.trim().parse::<u32>().ok())
+                .map(|freq| freq as f64 / 1_000_000.0)
+
+        })
+        .collect();
+    if !speeds.is_empty() {(speeds.iter().sum::<f64>() / speeds.len() as f64)} 
+    else {0.0}
 }
 // Memory Section
 // t
