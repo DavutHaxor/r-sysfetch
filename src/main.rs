@@ -26,6 +26,15 @@ fn main() {
     println!("Cores: {}", cpu_cores());
     println!("Threads: {}", cpu_threads());
 
+    // MEM section
+    println!("MEM");
+    println!("Total: {:.1} GB", mem_total());
+    println!("Free: {:.1} GB", mem_free());
+    println!("Available: {:.1} GB", mem_available());
+    let (swap_total, swap_free) = mem_swap_info();
+    print!("Swap Total: {:.1} GB\n Swap Free: {:.1} GB\n", swap_total, swap_free);
+
+
 
 }
 
@@ -137,24 +146,82 @@ fn cpu_freq() -> f64 {
 }
 // Memory Section
 // t
-fn mem_total() {
-    
+fn mem_total() -> f64 {
+    match fs::read_to_string("/proc/meminfo") {
+        Ok(content) => content
+            .lines()
+            .find(|line| line.starts_with("MemTotal:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .map(|kb| kb / 1_000_000.0)
+            .unwrap_or(0.0),
+        Err(_) => 0.0,
+    }
 }
 // f
-fn mem_free() {
-    
+fn mem_free() -> f64 {
+    match fs::read_to_string("/proc/meminfo") {
+        Ok(content) => content
+            .lines()
+            .find(|line| line.starts_with("MemFree:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .map(|kb| kb / 1_000_000.0)
+            .unwrap_or(0.0),
+        Err(_) => 0.0,
+    }
 }
 // a
-fn mem_available() {
-    
+fn mem_available() -> f64 {
+    match fs::read_to_string("/proc/meminfo") {
+        Ok(content) => content
+            .lines()
+            .find(|line| line.starts_with("MemAvailable:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .map(|kb| kb / 1_000_000.0)
+            .unwrap_or(0.0),
+        Err(_) => 0.0,
+    }   
 }
 // c
-fn mem_cached() {
-    
+fn mem_cached() -> f64 {
+    match fs::read_to_string("/proc/meminfo") {
+        Ok(content) => content
+            .lines()
+            .find(|line| line.starts_with("Cached:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .map(|kb| kb / 1_000_000.0)
+            .unwrap_or(0.0),
+        Err(_) => 0.0,
+    }   
 }
 // s
-fn mem_swap_info() {
-    
+fn mem_swap_info() -> (f64, f64) {
+    let swap_total = match fs::read_to_string("/proc/meminfo") {
+        Ok(content) => content
+            .lines()
+            .find(|line| line.starts_with("SwapTotal:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .map(|kb| kb / 1_000_000.0)
+            .unwrap_or(0.0),
+        Err(_) => 0.0,
+    };
+
+    let swap_free = match fs::read_to_string("/proc/meminfo") {
+        Ok(content) => content
+            .lines()
+            .find(|line| line.starts_with("SwapFree:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .map(|kb| kb / 1_000_000.0)
+            .unwrap_or(0.0),
+        Err(_) => 0.0,
+    };
+
+    (swap_total, swap_free)
 }
 // GPU Section
 // v
