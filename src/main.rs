@@ -4,20 +4,19 @@ use std::{char, collections::HashMap, env, fmt::{format, Write}, fs, thread, tim
 fn main() {
     
     let arguments: Vec<String> = env::args().collect();
+    let mut arg_count = HashMap::new();
+    for arg in arguments.iter().skip(1) {
+        *arg_count.entry(arg).or_insert(0) += 1;
+    }
 
-    if arguments.len() >= 2 {
-        let dev1 = &arguments[0];
-        let args1: Vec<char> = arguments[1].chars().collect();
-    } 
-    if arguments.len() >= 4 {
-        let dev2 = &arguments[2];
-        let args2: Vec<char> = arguments[3].chars().collect();
-    }
-    if arguments.len() >= 6 {
-        let dev3 = &arguments[4];
-        let args3: Vec<char> = arguments[5].chars().collect();
-    }
-    // CPU section
+    if arg_count.contains_key(&"cpu".to_string()) { print_cpu(); }
+    if arg_count.contains_key(&"mem".to_string()) { print_mem(); }
+    if arg_count.contains_key(&"gpu".to_string()) { print_gpu(); }
+
+}
+
+// CPU section
+fn print_cpu() {
     println!("CPU");    
     println!("  {}", cpu_model_name());
     println!("  Usage: {:.2}%", cpu_usage());
@@ -25,16 +24,18 @@ fn main() {
     println!("  Temperature: {:.1} °C", cpu_temperature() / 1000.0);
     println!("  Cores: {}", cpu_cores());
     println!("  Threads: {}", cpu_threads());
-
-    // MEM section
+}
+// MEM section
+fn print_mem() {
     println!("MEM");
     println!("  Total: {:.1} GB", mem_total());
     println!("  Free: {:.1} GB", mem_free());
     println!("  Available: {:.1} GB", mem_available());
     let (swap_total, swap_free) = mem_swap_info();
     print!("  Swap Total: {:.1} GB\n  Swap Free: {:.1} GB\n", swap_total, swap_free);
-    
-    // GPU section
+}
+// GPU section
+fn print_gpu() {
     println!("GPU");
     let (vram_total, vram_used) = gpu_vram('1');
     print!("  VRAM Total: {:.2} GB\n  VRAM Used: {:.2} GB\n", vram_total, vram_used);
@@ -43,12 +44,8 @@ fn main() {
     println!("  Temperature: {} °C", gpu_temp('1'));
     let (core_speed, mem_speed) = gpu_clocks('1');
     print!("  Core Speed: {} MHz\n  Memory Speed: {} MHz\n", core_speed, mem_speed);
-
-
 }
 
-// CPU Section
-// m
 fn cpu_model_name() -> String {
     match fs::read_to_string("/proc/cpuinfo") {
         Ok(content) => content
@@ -60,7 +57,7 @@ fn cpu_model_name() -> String {
         Err(_) => "Unknown".to_string(),
     }
 }
-// c
+
 fn cpu_cores() -> String {
     match fs::read_to_string("/proc/cpuinfo") {
         Ok(content) => content
@@ -72,7 +69,7 @@ fn cpu_cores() -> String {
         Err(_) => "More than 0".to_string(),
     }
 }
-// t
+
 fn cpu_threads() -> String {
     match fs::read_to_string("/proc/cpuinfo") {
         Ok(content) => content
@@ -84,7 +81,7 @@ fn cpu_threads() -> String {
         Err(_) => "More than 0".to_string(),
     }
 }
-// h for heat 
+ 
 fn cpu_temperature() -> f64 {
     let mut acpitz_temp = None;
     for i in 0..10 {
@@ -92,12 +89,12 @@ fn cpu_temperature() -> f64 {
         let temp_path = format!("/sys/class/hwmon/hwmon{}/temp1_input", i);
         if let Ok(name) = fs::read_to_string(&path) {
             let name = name.trim();
-            if name == "x86_pkg_temp" {
+            if name == "x86_pkg_temp" { // Check for primary sensor we want to read
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
                     return temp.trim().parse::<f64>().unwrap_or(0.0);
                 }
             }
-            else if name == "acpitz" && acpitz_temp.is_none() {
+            else if name == "acpitz" && acpitz_temp.is_none() { // Fallback sensor
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
                     acpitz_temp = temp.trim().parse::<f64>().ok();
                 }
@@ -106,7 +103,7 @@ fn cpu_temperature() -> f64 {
     }
     acpitz_temp.unwrap_or(0.0)
 }
-// u
+
 fn cpu_usage() -> f64 {
     fn get_values() -> Option<(u64, u64)> {
         fs::read_to_string("/proc/stat").ok().and_then(|content| {
@@ -127,16 +124,16 @@ fn cpu_usage() -> f64 {
     }
     
     let (total1, idle1) = get_values().unwrap_or((0, 0));
-    thread::sleep(time::Duration::from_millis(100));
+    thread::sleep(time::Duration::from_millis(100)); // 100 ms for relatively correct measurement
     let (total2, idle2) = get_values().unwrap_or((0, 0));
-    
+    // Formula to calculate CPU usage in an interval
     let total_diff = total2 - total1;
     let idle_diff = idle2 - idle1;
     if total_diff > 0 {
         (1.0 - (idle_diff as f64 / total_diff as f64)) * 100.0
     } else { 0.0 }
 }
-// s for speed
+
 fn cpu_freq() -> f64 {
     let threads = cpu_threads()
         .parse::<usize>()
@@ -153,8 +150,8 @@ fn cpu_freq() -> f64 {
     if !speeds.is_empty() {(speeds.iter().sum::<f64>() / speeds.len() as f64)} 
     else {0.0}
 }
-// Memory Section
-// t
+
+
 fn mem_total() -> f64 {
     match fs::read_to_string("/proc/meminfo") {
         Ok(content) => content
@@ -167,7 +164,7 @@ fn mem_total() -> f64 {
         Err(_) => 0.0,
     }
 }
-// f
+
 fn mem_free() -> f64 {
     match fs::read_to_string("/proc/meminfo") {
         Ok(content) => content
@@ -180,7 +177,7 @@ fn mem_free() -> f64 {
         Err(_) => 0.0,
     }
 }
-// a
+
 fn mem_available() -> f64 {
     match fs::read_to_string("/proc/meminfo") {
         Ok(content) => content
@@ -193,7 +190,7 @@ fn mem_available() -> f64 {
         Err(_) => 0.0,
     }   
 }
-// c
+
 fn mem_cached() -> f64 {
     match fs::read_to_string("/proc/meminfo") {
         Ok(content) => content
@@ -206,7 +203,7 @@ fn mem_cached() -> f64 {
         Err(_) => 0.0,
     }   
 }
-// s
+
 fn mem_swap_info() -> (f64, f64) {
     let swap_total = match fs::read_to_string("/proc/meminfo") {
         Ok(content) => content
@@ -234,9 +231,6 @@ fn mem_swap_info() -> (f64, f64) {
 }
 
 
-
-// GPU Section 
-// v
 fn gpu_vram(gpu_id: char) -> (f64, f64) {
     let vram_total_path = format!("/sys/class/drm/card{}/device/mem_info_vram_total", gpu_id);
     let vram_total = fs::read_to_string(&vram_total_path).ok()
@@ -250,7 +244,7 @@ fn gpu_vram(gpu_id: char) -> (f64, f64) {
         .unwrap_or(0.0);
     (vram_total, vram_used)
 }
-// u
+
 fn gpu_usage(gpu_id: char) -> u8 {
     let path = format!("/sys/class/drm/card{}/device/gpu_busy_percent", gpu_id);
     match fs::read_to_string(&path) {
@@ -261,7 +255,7 @@ fn gpu_usage(gpu_id: char) -> u8 {
         Err(_) => 0,
     }
 }
-// p
+
 fn gpu_power(gpu_id: char) -> (u64, u64) {
     let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
     let power_used = fs::read_dir(&base_path)
@@ -292,7 +286,7 @@ fn gpu_power(gpu_id: char) -> (u64, u64) {
 
     (power_used, power_max)
 }
-// t
+
 fn gpu_temp(gpu_id: char) -> u64 {
     let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
     fs::read_dir(&base_path)
@@ -308,7 +302,7 @@ fn gpu_temp(gpu_id: char) -> u64 {
         })
         .unwrap_or(0)
 }
-// c
+
 fn gpu_clocks(gpu_id: char) -> (u64, u64) {
     let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
     let core_speed = fs::read_dir(&base_path)
