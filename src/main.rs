@@ -1,18 +1,23 @@
 #![allow(unused)]
-use std::{char, collections::HashMap, env, fmt::{format, Write}, fs, thread, time};
+use std::{char, collections::HashMap, env, fmt::{format, Write}, fs::{self, exists}, path::PathBuf, process::exit, thread, time};
 
 fn main() {
-    
     let arguments: Vec<String> = env::args().collect();
-    let mut arg_count = HashMap::new();
-    for arg in arguments.iter().skip(1) {
-        *arg_count.entry(arg).or_insert(0) += 1;
+    if arguments.len() > 1 {
+        let mut arg_count = HashMap::new();
+        for arg in arguments.iter().skip(1) {
+            *arg_count.entry(arg).or_insert(0) += 1;
+        }
+        if arg_count.contains_key(&"cpu".to_string()) { print_cpu(); }
+        if arg_count.contains_key(&"mem".to_string()) { print_mem(); }
+        if arg_count.contains_key(&"gpu".to_string()) { print_gpu(); }
+    } else {
+        let home_dir = env::var("HOME")
+            .expect("HOME environment variable is not set.");
+        let config_file = PathBuf::from(&home_dir).join(".config/r-sysfetch.conf");
+        create_config(&config_file);
+        let (flags, gpu_ids) = read_config(&config_file).unwrap();
     }
-
-    if arg_count.contains_key(&"cpu".to_string()) { print_cpu(); }
-    if arg_count.contains_key(&"mem".to_string()) { print_mem(); }
-    if arg_count.contains_key(&"gpu".to_string()) { print_gpu(); }
-
 }
 
 // CPU section
@@ -42,7 +47,7 @@ fn print_gpu() {
     let (power_used, power_max) = gpu_power('1');
     print!("  Power Used: {} Watts\n  Power Max: {} Watts\n", power_used, power_max);
     println!("  Temperature: {} °C", gpu_temp('1'));
-    let (core_speed, mem_speed) = gpu_clocks('1');
+    let (core_speed, mem_speed) = gpu_clock_speeds('1');
     print!("  Core Speed: {} MHz\n  Memory Speed: {} MHz\n", core_speed, mem_speed);
 }
 
@@ -303,7 +308,7 @@ fn gpu_temp(gpu_id: char) -> u64 {
         .unwrap_or(0)
 }
 
-fn gpu_clocks(gpu_id: char) -> (u64, u64) {
+fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
     let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
     let core_speed = fs::read_dir(&base_path)
         .ok()
@@ -335,9 +340,52 @@ fn gpu_clocks(gpu_id: char) -> (u64, u64) {
 }
 
 
+fn create_config(config_file: &PathBuf) {
+    if !config_file.exists() {
+    let config_content = r#"#r-sysfetch configuration file!
+cpu_model_name
+cpu_usage
+cpu_frequency
+cpu_temperature
+cpu_cores
+cpu_threads
 
+mem_total
+mem_free
+mem_available
+mem_swap_info
 
+gpu_vram
+gpu_power
+gpu_temp
+gpu_clock_speeds
 
+gpu=0
+gpu=1
+"#;
+    fs::write(&config_file, &config_content);
+    }
+}
+
+fn read_config(config_file: &PathBuf) -> Result<(HashMap<String, bool>, Vec<String>), std::io::Error> {
+    let content = fs::read_to_string(config_file)?;
+    let mut gpu_ids = Vec::new();
+    let mut flags = HashMap::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(stripped) = line.strip_prefix("gpu=") {
+            gpu_ids.push(stripped.to_string());
+            continue;
+        }
+        flags.insert(line.to_string(), true);
+    }
+
+    Ok((flags, gpu_ids))
+}
 
 
 
