@@ -1,5 +1,14 @@
 #![allow(unused)]
-use std::{char, collections::HashMap, env, fmt::{format, Write}, fs::{self, exists}, path::PathBuf, process::exit, thread, time};
+use std::{
+    char,
+    collections::HashMap,
+    env,
+    fmt::{Write, format},
+    fs::{self, exists},
+    path::PathBuf,
+    process::exit,
+    thread, time,
+};
 
 fn main() {
     let arguments: Vec<String> = env::args().collect();
@@ -8,21 +17,27 @@ fn main() {
         for arg in arguments.iter().skip(1) {
             *arg_count.entry(arg).or_insert(0) += 1;
         }
-        if arg_count.contains_key(&"cpu".to_string()) { print_cpu(); }
-        if arg_count.contains_key(&"mem".to_string()) { print_mem(); }
-        if arg_count.contains_key(&"gpu".to_string()) { print_gpu(); }
+        if arg_count.contains_key(&"cpu".to_string()) {
+            print_cpu();
+        }
+        if arg_count.contains_key(&"mem".to_string()) {
+            print_mem();
+        }
+        if arg_count.contains_key(&"gpu".to_string()) {
+            print_gpu();
+        }
     } else {
-        let home_dir = env::var("HOME")
-            .expect("HOME environment variable is not set.");
+        let home_dir = env::var("HOME").expect("HOME environment variable is not set.");
         let config_file = PathBuf::from(&home_dir).join(".config/r-sysfetch.conf");
         create_config(&config_file);
         let (flags, gpu_ids) = read_config(&config_file).unwrap();
     }
 }
 
+
 // CPU section
 fn print_cpu() {
-    println!("CPU");    
+    println!("CPU");
     println!("  {}", cpu_model_name());
     println!("  Usage: {:.2}%", cpu_usage());
     println!("  Frequency: {:.1} GHz", cpu_freq());
@@ -37,18 +52,30 @@ fn print_mem() {
     println!("  Free: {:.1} GB", mem_free());
     println!("  Available: {:.1} GB", mem_available());
     let (swap_total, swap_free) = mem_swap_info();
-    print!("  Swap Total: {:.1} GB\n  Swap Free: {:.1} GB\n", swap_total, swap_free);
+    print!(
+        "  Swap Total: {:.1} GB\n  Swap Free: {:.1} GB\n",
+        swap_total, swap_free
+    );
 }
 // GPU section
 fn print_gpu() {
     println!("GPU");
     let (vram_total, vram_used) = gpu_vram('1');
-    print!("  VRAM Total: {:.2} GB\n  VRAM Used: {:.2} GB\n", vram_total, vram_used);
+    print!(
+        "  VRAM Total: {:.2} GB\n  VRAM Used: {:.2} GB\n",
+        vram_total, vram_used
+    );
     let (power_used, power_max) = gpu_power('1');
-    print!("  Power Used: {} Watts\n  Power Max: {} Watts\n", power_used, power_max);
+    print!(
+        "  Power Used: {} Watts\n  Power Max: {} Watts\n",
+        power_used, power_max
+    );
     println!("  Temperature: {} °C", gpu_temp('1'));
     let (core_speed, mem_speed) = gpu_clock_speeds('1');
-    print!("  Core Speed: {} MHz\n  Memory Speed: {} MHz\n", core_speed, mem_speed);
+    print!(
+        "  Core Speed: {} MHz\n  Memory Speed: {} MHz\n",
+        core_speed, mem_speed
+    );
 }
 
 fn cpu_model_name() -> String {
@@ -86,7 +113,7 @@ fn cpu_threads() -> String {
         Err(_) => "More than 0".to_string(),
     }
 }
- 
+
 fn cpu_temperature() -> f64 {
     let mut acpitz_temp = None;
     for i in 0..10 {
@@ -94,12 +121,13 @@ fn cpu_temperature() -> f64 {
         let temp_path = format!("/sys/class/hwmon/hwmon{}/temp1_input", i);
         if let Ok(name) = fs::read_to_string(&path) {
             let name = name.trim();
-            if name == "x86_pkg_temp" { // Check for primary sensor we want to read
+            if name == "x86_pkg_temp" {
+                // Check for primary sensor we want to read
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
                     return temp.trim().parse::<f64>().unwrap_or(0.0);
                 }
-            }
-            else if name == "acpitz" && acpitz_temp.is_none() { // Fallback sensor
+            } else if name == "acpitz" && acpitz_temp.is_none() {
+                // Fallback sensor
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
                     acpitz_temp = temp.trim().parse::<f64>().ok();
                 }
@@ -123,11 +151,13 @@ fn cpu_usage() -> f64 {
                     let total: u64 = values.iter().sum();
                     let idle = values[3] + values[4];
                     Some((total, idle))
-                } else { None }
+                } else {
+                    None
+                }
             })
         })
     }
-    
+
     let (total1, idle1) = get_values().unwrap_or((0, 0));
     thread::sleep(time::Duration::from_millis(100)); // 100 ms for relatively correct measurement
     let (total2, idle2) = get_values().unwrap_or((0, 0));
@@ -136,26 +166,28 @@ fn cpu_usage() -> f64 {
     let idle_diff = idle2 - idle1;
     if total_diff > 0 {
         (1.0 - (idle_diff as f64 / total_diff as f64)) * 100.0
-    } else { 0.0 }
+    } else {
+        0.0
+    }
 }
 
 fn cpu_freq() -> f64 {
-    let threads = cpu_threads()
-        .parse::<usize>()
-        .unwrap_or(0);
+    let threads = cpu_threads().parse::<usize>().unwrap_or(0);
     let speeds: Vec<f64> = (0..threads)
         .filter_map(|i| {
             let path = format!("/sys/devices/system/cpu/cpu{}/cpufreq/scaling_cur_freq", i);
-            fs::read_to_string(&path).ok()
+            fs::read_to_string(&path)
+                .ok()
                 .and_then(|freq| freq.trim().parse::<u32>().ok())
                 .map(|freq| freq as f64 / 1_000_000.0)
-
         })
         .collect();
-    if !speeds.is_empty() {(speeds.iter().sum::<f64>() / speeds.len() as f64)} 
-    else {0.0}
+    if !speeds.is_empty() {
+        (speeds.iter().sum::<f64>() / speeds.len() as f64)
+    } else {
+        0.0
+    }
 }
-
 
 fn mem_total() -> f64 {
     match fs::read_to_string("/proc/meminfo") {
@@ -193,7 +225,7 @@ fn mem_available() -> f64 {
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
-    }   
+    }
 }
 
 fn mem_cached() -> f64 {
@@ -206,7 +238,7 @@ fn mem_cached() -> f64 {
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
-    }   
+    }
 }
 
 fn mem_swap_info() -> (f64, f64) {
@@ -235,15 +267,16 @@ fn mem_swap_info() -> (f64, f64) {
     (swap_total, swap_free)
 }
 
-
 fn gpu_vram(gpu_id: char) -> (f64, f64) {
     let vram_total_path = format!("/sys/class/drm/card{}/device/mem_info_vram_total", gpu_id);
-    let vram_total = fs::read_to_string(&vram_total_path).ok()
+    let vram_total = fs::read_to_string(&vram_total_path)
+        .ok()
         .and_then(|s| s.trim().parse::<u64>().ok())
         .map(|bytes| bytes as f64 / 1_000_000_000.0)
         .unwrap_or(0.0);
     let vram_used_path = format!("/sys/class/drm/card{}/device/mem_info_vram_usage", gpu_id);
-    let vram_used = fs::read_to_string(&vram_used_path).ok() 
+    let vram_used = fs::read_to_string(&vram_used_path)
+        .ok()
         .and_then(|s| s.trim().parse::<u64>().ok())
         .map(|bytes| bytes as f64 / 1_000_000_000.0)
         .unwrap_or(0.0);
@@ -253,10 +286,7 @@ fn gpu_vram(gpu_id: char) -> (f64, f64) {
 fn gpu_usage(gpu_id: char) -> u8 {
     let path = format!("/sys/class/drm/card{}/device/gpu_busy_percent", gpu_id);
     match fs::read_to_string(&path) {
-        Ok(content) => content
-            .trim()
-            .parse::<u8>()
-            .unwrap_or(0),
+        Ok(content) => content.trim().parse::<u8>().unwrap_or(0),
         Err(_) => 0,
     }
 }
@@ -269,9 +299,10 @@ fn gpu_power(gpu_id: char) -> (u64, u64) {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
                 let power_file = path.join("power1_average");
-                fs::read_to_string(power_file).ok()
+                fs::read_to_string(power_file)
+                    .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|microwatts| microwatts as u64 / 1_000_000 )
+                    .map(|microwatts| microwatts as u64 / 1_000_000)
             })
         })
         .unwrap_or(0);
@@ -282,9 +313,10 @@ fn gpu_power(gpu_id: char) -> (u64, u64) {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
                 let power_file = path.join("power1_cap_max");
-                fs::read_to_string(power_file).ok()
+                fs::read_to_string(power_file)
+                    .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|microwatts| microwatts as u64 / 1_000_000 )
+                    .map(|microwatts| microwatts as u64 / 1_000_000)
             })
         })
         .unwrap_or(0);
@@ -300,7 +332,8 @@ fn gpu_temp(gpu_id: char) -> u64 {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
                 let temp_file = path.join("temp1_input");
-                fs::read_to_string(temp_file).ok()
+                fs::read_to_string(temp_file)
+                    .ok()
                     .and_then(|temp| temp.trim().parse::<u64>().ok())
                     .map(|celsius| celsius as u64 / 1000)
             })
@@ -316,9 +349,10 @@ fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
                 let power_file = path.join("freq1_input");
-                fs::read_to_string(power_file).ok()
+                fs::read_to_string(power_file)
+                    .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|hertz| hertz as u64 / 1_000_000 )
+                    .map(|hertz| hertz as u64 / 1_000_000)
             })
         })
         .unwrap_or(0);
@@ -329,20 +363,20 @@ fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
                 let power_file = path.join("freq2_input");
-                fs::read_to_string(power_file).ok()
+                fs::read_to_string(power_file)
+                    .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|hertz| hertz as u64 / 1_000_000 )
+                    .map(|hertz| hertz as u64 / 1_000_000)
             })
         })
         .unwrap_or(0);
 
-    (core_speed, mem_speed) 
+    (core_speed, mem_speed)
 }
-
 
 fn create_config(config_file: &PathBuf) {
     if !config_file.exists() {
-    let config_content = r#"#r-sysfetch configuration file!
+        let config_content = r#"#r-sysfetch configuration file!
 cpu_model_name
 cpu_usage
 cpu_frequency
@@ -363,11 +397,13 @@ gpu_clock_speeds
 gpu=0
 gpu=1
 "#;
-    fs::write(&config_file, &config_content);
+        fs::write(&config_file, &config_content);
     }
 }
 
-fn read_config(config_file: &PathBuf) -> Result<(HashMap<String, bool>, Vec<String>), std::io::Error> {
+fn read_config(
+    config_file: &PathBuf,
+) -> Result<(HashMap<String, bool>, Vec<String>), std::io::Error> {
     let content = fs::read_to_string(config_file)?;
     let mut gpu_ids = Vec::new();
     let mut flags = HashMap::new();
@@ -386,14 +422,4 @@ fn read_config(config_file: &PathBuf) -> Result<(HashMap<String, bool>, Vec<Stri
 
     Ok((flags, gpu_ids))
 }
-
-
-
-
-
-
-
-
-
-
 
