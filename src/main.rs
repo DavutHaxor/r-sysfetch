@@ -24,7 +24,12 @@ use ratatui::crossterm::{
 };
 
 fn main() {
-    create_config(&get_config_path());
+    let config_path = get_config_path();
+    create_config(&config_path);
+    let Ok((flags, gpu_ids)) = read_config(&config_path) else {
+        eprintln!("Failed to read config");
+        return;
+    };
     let arguments: Vec<String> = env::args().collect();
     if arguments.len() > 1 {
         let mut arg_count = HashMap::new();
@@ -38,6 +43,11 @@ fn main() {
             print_mem();
         }
         if arg_count.contains_key(&"gpu".to_string()) {
+            print_gpu();
+        }
+        if arg_count.contains_key(&"a".to_string()) {
+            print_cpu();
+            print_mem();
             print_gpu();
         }
     } else {
@@ -205,6 +215,7 @@ fn run_tui() -> std::io::Result<()> {
             let (vram_total, vram_used) = gpu_vram('1');
             let (power_used, power_max) = gpu_power('1');
             let (core_speed, mem_speed) = gpu_clock_speeds('1');
+            let gpu_usage = gpu_usage('1');
             let gpu_lines = vec![
                 Line::from(vec![
                     Span::styled("  VRAM Total    ", Style::default().fg(Color::DarkGray)),
@@ -231,6 +242,11 @@ fn run_tui() -> std::io::Result<()> {
                     ),
                 ]),
                 Line::from(vec![
+                    Span::styled("  Usage  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} %", gpu_usage),
+                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                        ),
                     Span::styled("  Temperature   ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{} °C", gpu_temp('1')),
@@ -637,7 +653,7 @@ gpu_power
 gpu_temp
 gpu_clock_speeds
 
-gpu=0
+#gpu=0
 gpu=1
 "#;
         fs::write(&config_file, &config_content).ok();
