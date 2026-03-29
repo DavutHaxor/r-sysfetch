@@ -9,6 +9,19 @@ use std::{
     process::exit,
     thread, time,
 };
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout, Alignment},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Paragraph},
+    Terminal,
+};
+use ratatui::crossterm::{
+    event::{self, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 
 fn main() {
     let arguments: Vec<String> = env::args().collect();
@@ -27,15 +40,241 @@ fn main() {
             print_gpu();
         }
     } else {
-        let home_dir = env::var("HOME").expect("HOME environment variable is not set.");
-        let config_file = PathBuf::from(&home_dir).join(".config/r-sysfetch.conf");
-        create_config(&config_file);
-        let (flags, gpu_ids) = read_config(&config_file).unwrap();
+        run_tui().expect("TUI failed");
     }
 }
 
+fn run_tui() -> std::io::Result<()> {
+    enable_raw_mode()?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
 
-// CPU section
+    loop {
+        terminal.draw(|frame| {
+            let area = frame.area();
+
+            // Outer vertical split: top row + bottom row
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
+                ])
+                .split(area);
+
+            // Top row: CPU (left) | MEM (right)
+            let top_cols = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
+                ])
+                .split(rows[0]);
+
+            // ── CPU box ──────────────────────────────────────────
+            let cpu_block = Block::default()
+                .title(Span::styled(
+                    " ⚡ CPU ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Cyan))
+                .style(Style::default().bg(Color::Black));
+
+            let cpu_lines = vec![
+                Line::from(vec![
+                    Span::styled("  Model      ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(cpu_model_name(), Style::default().fg(Color::White)),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Usage      ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2}%", cpu_usage()),
+                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Frequency  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GHz", cpu_freq()),
+                        Style::default().fg(Color::Yellow),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Temp       ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.1} °C", cpu_temperature() / 1000.0),
+                        Style::default().fg(Color::Red),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Cores      ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(cpu_cores(), Style::default().fg(Color::Magenta)),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Threads    ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(cpu_threads(), Style::default().fg(Color::Magenta)),
+                ]),
+            ];
+
+            frame.render_widget(
+                Paragraph::new(cpu_lines)
+                    .block(cpu_block)
+                    .alignment(Alignment::Left),
+                top_cols[0],
+            );
+
+            // ── MEM box ──────────────────────────────────────────
+            let mem_block = Block::default()
+                .title(Span::styled(
+                    " 🧠 Memory ",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Magenta))
+                .style(Style::default().bg(Color::Black));
+
+            let (swap_total, swap_free) = mem_swap_info();
+            let mem_lines = vec![
+                Line::from(vec![
+                    Span::styled("  Total      ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GB", mem_total()),
+                        Style::default().fg(Color::White),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Free       ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GB", mem_free()),
+                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Available  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GB", mem_available()),
+                        Style::default().fg(Color::Yellow),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Swap Total ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GB", swap_total),
+                        Style::default().fg(Color::Blue),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Swap Free  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GB", swap_free),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                ]),
+            ];
+
+            frame.render_widget(
+                Paragraph::new(mem_lines)
+                    .block(mem_block)
+                    .alignment(Alignment::Left),
+                top_cols[1],
+            );
+
+            // ── GPU box (full bottom width) ───────────────────────
+            let gpu_block = Block::default()
+                .title(Span::styled(
+                    " 🎮 GPU (card1) ",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Yellow))
+                .style(Style::default().bg(Color::Black));
+
+            let (vram_total, vram_used) = gpu_vram('1');
+            let (power_used, power_max) = gpu_power('1');
+            let (core_speed, mem_speed) = gpu_clock_speeds('1');
+            let gpu_lines = vec![
+                Line::from(vec![
+                    Span::styled("  VRAM Total    ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GB", vram_total),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled("    VRAM Used    ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:.2} GB", vram_used),
+                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Power Used    ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{} W", power_used),
+                        Style::default().fg(Color::Red),
+                    ),
+                    Span::styled("    Power Max    ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{} W", power_max),
+                        Style::default().fg(Color::Yellow),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Temperature   ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{} °C", gpu_temp('1')),
+                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("  Core Clock    ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{} MHz", core_speed),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    Span::styled("    Memory Clock ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{} MHz", mem_speed),
+                        Style::default().fg(Color::Magenta),
+                    ),
+                ]),
+            ];
+
+            frame.render_widget(
+                Paragraph::new(gpu_lines)
+                    .block(gpu_block)
+                    .alignment(Alignment::Left),
+                rows[1],
+            );
+        })?;
+
+        // Poll with timeout so the UI can refresh; quit on 'q' / Esc
+        if event::poll(std::time::Duration::from_millis(2000))? {
+            if let Event::Key(key) = event::read()? {
+                if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
+                    break;
+                }
+            }
+        }
+    }
+
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    Ok(())
+}
+
+// ── CLI print helpers ─────────────────────────────────────────────────────────
+
 fn print_cpu() {
     println!("CPU");
     println!("  {}", cpu_model_name());
@@ -45,7 +284,7 @@ fn print_cpu() {
     println!("  Cores: {}", cpu_cores());
     println!("  Threads: {}", cpu_threads());
 }
-// MEM section
+
 fn print_mem() {
     println!("MEM");
     println!("  Total: {:.1} GB", mem_total());
@@ -57,7 +296,7 @@ fn print_mem() {
         swap_total, swap_free
     );
 }
-// GPU section
+
 fn print_gpu() {
     println!("GPU");
     let (vram_total, vram_used) = gpu_vram('1');
@@ -77,6 +316,8 @@ fn print_gpu() {
         core_speed, mem_speed
     );
 }
+
+// ── System info functions (unchanged from original) ───────────────────────────
 
 fn cpu_model_name() -> String {
     match fs::read_to_string("/proc/cpuinfo") {
@@ -122,12 +363,10 @@ fn cpu_temperature() -> f64 {
         if let Ok(name) = fs::read_to_string(&path) {
             let name = name.trim();
             if name == "x86_pkg_temp" {
-                // Check for primary sensor we want to read
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
                     return temp.trim().parse::<f64>().unwrap_or(0.0);
                 }
             } else if name == "acpitz" && acpitz_temp.is_none() {
-                // Fallback sensor
                 if let Ok(temp) = fs::read_to_string(&temp_path) {
                     acpitz_temp = temp.trim().parse::<f64>().ok();
                 }
@@ -146,7 +385,6 @@ fn cpu_usage() -> f64 {
                     .skip(1)
                     .filter_map(|s| s.parse().ok())
                     .collect();
-
                 if values.len() >= 5 {
                     let total: u64 = values.iter().sum();
                     let idle = values[3] + values[4];
@@ -159,9 +397,8 @@ fn cpu_usage() -> f64 {
     }
 
     let (total1, idle1) = get_values().unwrap_or((0, 0));
-    thread::sleep(time::Duration::from_millis(100)); // 100 ms for relatively correct measurement
+    thread::sleep(time::Duration::from_millis(100));
     let (total2, idle2) = get_values().unwrap_or((0, 0));
-    // Formula to calculate CPU usage in an interval
     let total_diff = total2 - total1;
     let idle_diff = idle2 - idle1;
     if total_diff > 0 {
@@ -183,7 +420,7 @@ fn cpu_freq() -> f64 {
         })
         .collect();
     if !speeds.is_empty() {
-        (speeds.iter().sum::<f64>() / speeds.len() as f64)
+        speeds.iter().sum::<f64>() / speeds.len() as f64
     } else {
         0.0
     }
@@ -195,7 +432,7 @@ fn mem_total() -> f64 {
             .lines()
             .find(|line| line.starts_with("MemTotal:"))
             .and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .and_then(|v| v.parse::<f64>().ok())
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
@@ -208,7 +445,7 @@ fn mem_free() -> f64 {
             .lines()
             .find(|line| line.starts_with("MemFree:"))
             .and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .and_then(|v| v.parse::<f64>().ok())
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
@@ -221,7 +458,7 @@ fn mem_available() -> f64 {
             .lines()
             .find(|line| line.starts_with("MemAvailable:"))
             .and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .and_then(|v| v.parse::<f64>().ok())
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
@@ -234,7 +471,7 @@ fn mem_cached() -> f64 {
             .lines()
             .find(|line| line.starts_with("Cached:"))
             .and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .and_then(|v| v.parse::<f64>().ok())
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
@@ -247,39 +484,43 @@ fn mem_swap_info() -> (f64, f64) {
             .lines()
             .find(|line| line.starts_with("SwapTotal:"))
             .and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .and_then(|v| v.parse::<f64>().ok())
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
     };
-
     let swap_free = match fs::read_to_string("/proc/meminfo") {
         Ok(content) => content
             .lines()
             .find(|line| line.starts_with("SwapFree:"))
             .and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|memtotal| memtotal.parse::<f64>().ok())
+            .and_then(|v| v.parse::<f64>().ok())
             .map(|kb| kb / 1_000_000.0)
             .unwrap_or(0.0),
         Err(_) => 0.0,
     };
-
     (swap_total, swap_free)
 }
 
 fn gpu_vram(gpu_id: char) -> (f64, f64) {
-    let vram_total_path = format!("/sys/class/drm/card{}/device/mem_info_vram_total", gpu_id);
-    let vram_total = fs::read_to_string(&vram_total_path)
-        .ok()
-        .and_then(|s| s.trim().parse::<u64>().ok())
-        .map(|bytes| bytes as f64 / 1_000_000_000.0)
-        .unwrap_or(0.0);
-    let vram_used_path = format!("/sys/class/drm/card{}/device/mem_info_vram_usage", gpu_id);
-    let vram_used = fs::read_to_string(&vram_used_path)
-        .ok()
-        .and_then(|s| s.trim().parse::<u64>().ok())
-        .map(|bytes| bytes as f64 / 1_000_000_000.0)
-        .unwrap_or(0.0);
+    let vram_total = fs::read_to_string(format!(
+        "/sys/class/drm/card{}/device/mem_info_vram_total",
+        gpu_id
+    ))
+    .ok()
+    .and_then(|s| s.trim().parse::<u64>().ok())
+    .map(|b| b as f64 / 1_000_000_000.0)
+    .unwrap_or(0.0);
+
+    let vram_used = fs::read_to_string(format!(
+        "/sys/class/drm/card{}/device/mem_info_vram_usage",
+        gpu_id
+    ))
+    .ok()
+    .and_then(|s| s.trim().parse::<u64>().ok())
+    .map(|b| b as f64 / 1_000_000_000.0)
+    .unwrap_or(0.0);
+
     (vram_total, vram_used)
 }
 
@@ -298,11 +539,10 @@ fn gpu_power(gpu_id: char) -> (u64, u64) {
         .and_then(|mut entries| {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
-                let power_file = path.join("power1_average");
-                fs::read_to_string(power_file)
+                fs::read_to_string(path.join("power1_average"))
                     .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|microwatts| microwatts as u64 / 1_000_000)
+                    .map(|uw| uw / 1_000_000)
             })
         })
         .unwrap_or(0);
@@ -312,11 +552,10 @@ fn gpu_power(gpu_id: char) -> (u64, u64) {
         .and_then(|mut entries| {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
-                let power_file = path.join("power1_cap_max");
-                fs::read_to_string(power_file)
+                fs::read_to_string(path.join("power1_cap_max"))
                     .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|microwatts| microwatts as u64 / 1_000_000)
+                    .map(|uw| uw / 1_000_000)
             })
         })
         .unwrap_or(0);
@@ -331,11 +570,10 @@ fn gpu_temp(gpu_id: char) -> u64 {
         .and_then(|mut entries| {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
-                let temp_file = path.join("temp1_input");
-                fs::read_to_string(temp_file)
+                fs::read_to_string(path.join("temp1_input"))
                     .ok()
-                    .and_then(|temp| temp.trim().parse::<u64>().ok())
-                    .map(|celsius| celsius as u64 / 1000)
+                    .and_then(|t| t.trim().parse::<u64>().ok())
+                    .map(|c| c / 1000)
             })
         })
         .unwrap_or(0)
@@ -348,11 +586,10 @@ fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
         .and_then(|mut entries| {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
-                let power_file = path.join("freq1_input");
-                fs::read_to_string(power_file)
+                fs::read_to_string(path.join("freq1_input"))
                     .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|hertz| hertz as u64 / 1_000_000)
+                    .map(|hz| hz / 1_000_000)
             })
         })
         .unwrap_or(0);
@@ -362,11 +599,10 @@ fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
         .and_then(|mut entries| {
             entries.find_map(|entry| {
                 let path = entry.ok()?.path();
-                let power_file = path.join("freq2_input");
-                fs::read_to_string(power_file)
+                fs::read_to_string(path.join("freq2_input"))
                     .ok()
                     .and_then(|p| p.trim().parse::<u64>().ok())
-                    .map(|hertz| hertz as u64 / 1_000_000)
+                    .map(|hz| hz / 1_000_000)
             })
         })
         .unwrap_or(0);
@@ -397,7 +633,7 @@ gpu_clock_speeds
 gpu=0
 gpu=1
 "#;
-        fs::write(&config_file, &config_content);
+        fs::write(&config_file, &config_content).ok();
     }
 }
 
@@ -422,4 +658,3 @@ fn read_config(
 
     Ok((flags, gpu_ids))
 }
-
