@@ -24,6 +24,7 @@ use ratatui::crossterm::{
 };
 
 fn main() {
+    create_config(&get_config_path());
     let arguments: Vec<String> = env::args().collect();
     if arguments.len() > 1 {
         let mut arg_count = HashMap::new();
@@ -608,6 +609,12 @@ fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
         .unwrap_or(0);
 
     (core_speed, mem_speed)
+}
+
+fn get_config_path() -> PathBuf {
+    let home = env::var("HOME")
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".config").join("r-sysfetch.conf")
 }
 
 fn create_config(config_file: &PathBuf) {

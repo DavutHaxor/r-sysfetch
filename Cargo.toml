@@ -1,5 +1,5 @@
 [package]
-name = "ui-r-sysfetch"
+name = "r-sysfetch"
 version = "0.1.0"
 edition = "2024"
 
