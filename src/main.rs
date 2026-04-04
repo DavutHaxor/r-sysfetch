@@ -2,14 +2,27 @@
 
 mod collectors {
     pub mod cpu;
-    pub mod mem;
     pub mod gpu;
+    pub mod mem;
 }
 
 use collectors::cpu::*;
-use collectors::mem::*;
 use collectors::gpu::*;
+use collectors::mem::*;
 
+use ratatui::crossterm::{
+    event::{self, Event, KeyCode},
+    execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+};
+use ratatui::{
+    Terminal,
+    backend::CrosstermBackend,
+    layout::{Alignment, Constraint, Direction, Layout},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Paragraph},
+};
 use std::{
     char,
     collections::HashMap,
@@ -19,19 +32,6 @@ use std::{
     path::PathBuf,
     process::exit,
     thread, time,
-};
-use ratatui::{
-    backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Alignment},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
-    Terminal,
-};
-use ratatui::crossterm::{
-    event::{self, Event, KeyCode},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 fn main() {
@@ -61,6 +61,9 @@ fn main() {
             print_mem();
             print_gpu();
         }
+        if arg_count.contains_key(&"t".to_string()) {
+            print_cpu_from_config(&flags);
+        }
     } else {
         run_tui().expect("TUI failed");
     }
@@ -80,19 +83,13 @@ fn run_tui() -> std::io::Result<()> {
             // Outer vertical split: top row + bottom row
             let rows = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
-                ])
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(area);
 
             // Top row: CPU (left) | MEM (right)
             let top_cols = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
-                ])
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(rows[0]);
 
             // CPU box
@@ -117,7 +114,9 @@ fn run_tui() -> std::io::Result<()> {
                     Span::styled("  Usage      ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{:.2}%", cpu_usage()),
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
                     ),
                 ]),
                 Line::from(vec![
@@ -177,7 +176,9 @@ fn run_tui() -> std::io::Result<()> {
                     Span::styled("  Free       ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{:.2} GB", mem_free()),
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
                     ),
                 ]),
                 Line::from(vec![
@@ -237,15 +238,14 @@ fn run_tui() -> std::io::Result<()> {
                     Span::styled("    VRAM Used    ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{:.2} GB", vram_used),
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
                     ),
                 ]),
                 Line::from(vec![
                     Span::styled("  Power Used    ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(
-                        format!("{} W", power_used),
-                        Style::default().fg(Color::Red),
-                    ),
+                    Span::styled(format!("{} W", power_used), Style::default().fg(Color::Red)),
                     Span::styled("    Power Max    ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{} W", power_max),
@@ -256,8 +256,10 @@ fn run_tui() -> std::io::Result<()> {
                     Span::styled("  Usage  ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{:.2} %", gpu_usage),
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
-                        ),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                     Span::styled("  Temperature   ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{} °C", gpu_temp('1')),
@@ -345,10 +347,8 @@ fn print_gpu() {
     );
 }
 
-
 fn get_config_path() -> PathBuf {
-    let home = env::var("HOME")
-        .unwrap_or_else(|_| ".".to_string());
+    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".config").join("r-sysfetch.conf")
 }
 
@@ -401,5 +401,34 @@ fn read_config(
     Ok((flags, gpu_ids))
 }
 
+fn print_cpu_from_config(flags: &HashMap<String, bool>) {
+    let cpu_group = [
+        "cpu_model_name",
+        "cpu_usage",
+        "cpu_frequency",
+        "cpu_temperature",
+        "cpu_cores",
+        "cpu_threads",
+    ];
+    let mut cpu_printed = false;
 
-
+    for key in cpu_group {
+        if flags.contains_key(key) {
+            if !cpu_printed {
+                println!("CPU");
+                cpu_printed = true;
+            }
+            match key {
+                "cpu_model_name" => println!("  {}", cpu_model_name()),
+                "cpu_usage" => println!("  Usage: {:.2}%", cpu_usage()),
+                "cpu_frequency" => println!("  Frequency: {:.1} GHz", cpu_freq()),
+                "cpu_temperature" => {
+                    println!("  Temperature: {:.1} °C", cpu_temperature() / 1000.0)
+                }
+                "cpu_cores" => println!("  Cores: {}", cpu_cores()),
+                "cpu_threads" => println!("  Threads: {}", cpu_threads()),
+                _ => {}
+            }
+        }
+    }
+}
