@@ -432,3 +432,32 @@ fn print_cpu_from_config(flags: &HashMap<String, bool>) {
         }
     }
 }
+
+fn print_mem_from_config(flags: &HashMap<String, bool>) {
+    let mem_group = ["mem_total", "mem_free", "mem_available", "mem_swap_info"];
+    let mut mem_printed = false;
+
+    for key in mem_group {
+        if flags.contains_key(key) {
+            if !mem_printed {
+                println!("MEM");
+                mem_printed = true;
+            }
+            match key {
+                "mem_total" => println!("  Total: {:.1} GB", mem_total()),
+                "mem_free" => println!("  Free: {:.1} GB", mem_free()),
+                "mem_available" => println!("  Available: {:.1} GB", mem_available()),
+                "mem_swap_info" => {
+                    let (swap_total, swap_free) = mem_swap_info();
+                    print!("");
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn print_gpu_from_config(flags: &HashMap<String, bool>) {
+    let gpu_group = ["gpu_vram", "gpu_power", "gpu_temp", "gpu_clock_speeds"];
+    let mut gpu_printed = false;
+}
