@@ -224,10 +224,10 @@ fn run_tui() -> std::io::Result<()> {
                 .border_style(Style::default().fg(Color::Yellow))
                 .style(Style::default().bg(Color::Black));
 
-            let (vram_total, vram_used) = gpu_vram('1');
-            let (power_used, power_max) = gpu_power('1');
-            let (core_speed, mem_speed) = gpu_clock_speeds('1');
-            let gpu_usage = gpu_usage('1');
+            let (vram_total, vram_used) = gpu_vram(&"1".to_string());
+            let (power_used, power_max) = gpu_power(&"1".to_string());
+            let (core_speed, mem_speed) = gpu_clock_speeds(&"1".to_string());
+            let gpu_usage = gpu_usage(&"1".to_string());
             let gpu_lines = vec![
                 Line::from(vec![
                     Span::styled("  VRAM Total    ", Style::default().fg(Color::DarkGray)),
@@ -262,7 +262,7 @@ fn run_tui() -> std::io::Result<()> {
                     ),
                     Span::styled("  Temperature   ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
-                        format!("{} °C", gpu_temp('1')),
+                        format!("{} °C", gpu_temp(&"1".to_string())),
                         Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                     ),
                 ]),
@@ -329,18 +329,18 @@ fn print_mem() {
 
 fn print_gpu() {
     println!("GPU");
-    let (vram_total, vram_used) = gpu_vram('1');
+    let (vram_total, vram_used) = gpu_vram(&"1".to_string());
     print!(
         "  VRAM Total: {:.2} GB\n  VRAM Used: {:.2} GB\n",
         vram_total, vram_used
     );
-    let (power_used, power_max) = gpu_power('1');
+    let (power_used, power_max) = gpu_power(&"1".to_string());
     print!(
         "  Power Used: {} Watts\n  Power Max: {} Watts\n",
         power_used, power_max
     );
-    println!("  Temperature: {} °C", gpu_temp('1'));
-    let (core_speed, mem_speed) = gpu_clock_speeds('1');
+    println!("  Temperature: {} °C", gpu_temp(&"1".to_string()));
+    let (core_speed, mem_speed) = gpu_clock_speeds(&"1".to_string());
     print!(
         "  Core Speed: {} MHz\n  Memory Speed: {} MHz\n",
         core_speed, mem_speed
@@ -449,7 +449,10 @@ fn print_mem_from_config(flags: &HashMap<String, bool>) {
                 "mem_available" => println!("  Available: {:.1} GB", mem_available()),
                 "mem_swap_info" => {
                     let (swap_total, swap_free) = mem_swap_info();
-                    print!("");
+                    print!(
+                        "  Swap Total: {:.1} GB\n  Swap Free: {:.1} GB\n",
+                        swap_total, swap_free
+                    );
                 }
                 _ => {}
             }
@@ -457,7 +460,28 @@ fn print_mem_from_config(flags: &HashMap<String, bool>) {
     }
 }
 
-fn print_gpu_from_config(flags: &HashMap<String, bool>) {
+fn print_gpu_from_config(flags: &HashMap<String, bool>, gpu_ids: &Vec<String>) {
     let gpu_group = ["gpu_vram", "gpu_power", "gpu_temp", "gpu_clock_speeds"];
-    let mut gpu_printed = false;
+    for id in gpu_ids {
+        let mut gpu_printed = false;
+        for key in gpu_group {
+            if flags.contains_key(key) {
+                if !gpu_printed {
+                    print!("GPU {}", id);
+                    gpu_printed = true;
+                }
+                match key {
+                    "gpu_vram" => {
+                        let (vram_total, vram_used) = gpu_vram(id);
+                        print!(
+                            "  VRAM Total: {:.2} GB\n  VRAM Used: {:.2} GB\n",
+                            vram_total, vram_used
+                        );
+                    }
+                    "gpu_power" => {}
+                    _ => {}
+                }
+            }
+        }
+    }
 }

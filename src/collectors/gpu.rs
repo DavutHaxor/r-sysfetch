@@ -10,8 +10,7 @@ use std::{
     thread, time,
 };
 
-
-pub fn gpu_vram(gpu_id: char) -> (f64, f64) {
+pub fn gpu_vram(gpu_id: &String) -> (f64, f64) {
     let vram_total = fs::read_to_string(format!(
         "/sys/class/drm/card{}/device/mem_info_vram_total",
         gpu_id
@@ -33,7 +32,7 @@ pub fn gpu_vram(gpu_id: char) -> (f64, f64) {
     (vram_total, vram_used)
 }
 
-pub fn gpu_usage(gpu_id: char) -> u8 {
+pub fn gpu_usage(gpu_id: &String) -> u8 {
     let path = format!("/sys/class/drm/card{}/device/gpu_busy_percent", gpu_id);
     match fs::read_to_string(&path) {
         Ok(content) => content.trim().parse::<u8>().unwrap_or(0),
@@ -41,7 +40,7 @@ pub fn gpu_usage(gpu_id: char) -> u8 {
     }
 }
 
-pub fn gpu_power(gpu_id: char) -> (u64, u64) {
+pub fn gpu_power(gpu_id: &String) -> (u64, u64) {
     let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
     let power_used = fs::read_dir(&base_path)
         .ok()
@@ -72,7 +71,7 @@ pub fn gpu_power(gpu_id: char) -> (u64, u64) {
     (power_used, power_max)
 }
 
-pub fn gpu_temp(gpu_id: char) -> u64 {
+pub fn gpu_temp(gpu_id: &String) -> u64 {
     let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
     fs::read_dir(&base_path)
         .ok()
@@ -88,7 +87,7 @@ pub fn gpu_temp(gpu_id: char) -> u64 {
         .unwrap_or(0)
 }
 
-pub fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
+pub fn gpu_clock_speeds(gpu_id: &String) -> (u64, u64) {
     let base_path = format!("/sys/class/drm/card{}/device/hwmon", gpu_id);
     let core_speed = fs::read_dir(&base_path)
         .ok()
@@ -118,6 +117,3 @@ pub fn gpu_clock_speeds(gpu_id: char) -> (u64, u64) {
 
     (core_speed, mem_speed)
 }
-
-
-
