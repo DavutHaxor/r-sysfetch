@@ -63,6 +63,8 @@ fn main() {
         }
         if arg_count.contains_key(&"t".to_string()) {
             print_cpu_from_config(&flags);
+            print_mem_from_config(&flags);
+            print_gpu_from_config(&flags, &gpu_ids);
         }
     } else {
         run_tui().expect("TUI failed");
@@ -467,7 +469,7 @@ fn print_gpu_from_config(flags: &HashMap<String, bool>, gpu_ids: &Vec<String>) {
         for key in gpu_group {
             if flags.contains_key(key) {
                 if !gpu_printed {
-                    print!("GPU {}", id);
+                    print!("GPU {} \n", id);
                     gpu_printed = true;
                 }
                 match key {
@@ -478,7 +480,21 @@ fn print_gpu_from_config(flags: &HashMap<String, bool>, gpu_ids: &Vec<String>) {
                             vram_total, vram_used
                         );
                     }
-                    "gpu_power" => {}
+                    "gpu_power" => {
+                        let (power_used, power_max) = gpu_power(id);
+                        print!(
+                            "  Power Used: {} Watts\n  Power Max: {} Watts\n",
+                            power_used, power_max
+                        );
+                    }
+                    "gpu_temp" => println!("  Temperature: {} °C", gpu_temp(id)),
+                    "gpu_clock_speeds" => {
+                        let (core_speed, mem_speed) = gpu_clock_speeds(id);
+                        print!(
+                            "  Core Speed: {} MHz\n  Memory Speed: {} MHz\n",
+                            core_speed, mem_speed
+                        );
+                    }
                     _ => {}
                 }
             }
