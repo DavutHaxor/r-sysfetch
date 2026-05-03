@@ -58,12 +58,12 @@ fn main() {
             print_mem();
         }
         if arg_count.contains_key(&"gpu".to_string()) {
-            print_gpu();
+            print_gpu(&gpu_ids[0]);
         }
         if arg_count.contains_key(&"a".to_string()) {
             print_cpu();
             print_mem();
-            print_gpu();
+            print_gpu(&gpu_ids[0]);
         }
         if arg_count.contains_key(&"t".to_string()) {
             print_cpu_from_config(&flags);
@@ -103,20 +103,20 @@ fn print_mem() {
     );
 }
 
-fn print_gpu() {
+fn print_gpu(gpu_id1: &String) {
     println!("GPU");
-    let (vram_total, vram_used) = gpu_vram(&"1".to_string());
+    let (vram_total, vram_used) = gpu_vram(gpu_id1);
     print!(
         "  VRAM Total: {:.2} GB\n  VRAM Used: {:.2} GB\n",
         vram_total, vram_used
     );
-    let (power_used, power_max) = gpu_power(&"1".to_string());
+    let (power_used, power_max) = gpu_power(gpu_id1);
     print!(
         "  Power Used: {} Watts\n  Power Max: {} Watts\n",
         power_used, power_max
     );
-    println!("  Temperature: {} °C", gpu_temp(&"1".to_string()));
-    let (core_speed, mem_speed) = gpu_clock_speeds(&"1".to_string());
+    println!("  Temperature: {} °C", gpu_temp(gpu_id1));
+    let (core_speed, mem_speed) = gpu_clock_speeds(gpu_id1);
     print!(
         "  Core Speed: {} MHz\n  Memory Speed: {} MHz\n",
         core_speed, mem_speed
