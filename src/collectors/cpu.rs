@@ -1,15 +1,8 @@
 #![allow(unused)]
 use std::{
-    char,
-    collections::HashMap,
-    env,
-    fmt::{Write, format},
-    fs::{self, exists},
-    path::PathBuf,
-    process::exit,
+    fs::{self},
     thread, time,
 };
-
 
 pub fn cpu_model_name() -> String {
     match fs::read_to_string("/proc/cpuinfo") {
@@ -117,6 +110,3 @@ pub fn cpu_freq() -> f64 {
         0.0
     }
 }
-
-
-

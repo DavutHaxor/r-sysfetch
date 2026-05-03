@@ -1,14 +1,5 @@
 #![allow(unused)]
-use std::{
-    char,
-    collections::HashMap,
-    env,
-    fmt::{Write, format},
-    fs::{self, exists},
-    path::PathBuf,
-    process::exit,
-    thread, time,
-};
+use std::fs::{self};
 
 pub fn gpu_vram(gpu_id: &String) -> (f64, f64) {
     let vram_total = fs::read_to_string(format!(

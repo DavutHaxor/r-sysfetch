@@ -1,15 +1,5 @@
 #![allow(unused)]
-use std::{
-    char,
-    collections::HashMap,
-    env,
-    fmt::{Write, format},
-    fs::{self, exists},
-    path::PathBuf,
-    process::exit,
-    thread, time,
-};
-
+use std::fs::{self, exists};
 
 pub fn mem_total() -> f64 {
     match fs::read_to_string("/proc/meminfo") {
@@ -86,6 +76,3 @@ pub fn mem_swap_info() -> (f64, f64) {
     };
     (swap_total, swap_free)
 }
-
-
-

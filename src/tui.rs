@@ -17,16 +17,6 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
 };
-use std::{
-    char,
-    collections::HashMap,
-    env,
-    fmt::{Write, format},
-    fs::{self, exists},
-    path::PathBuf,
-    process::exit,
-    thread, time,
-};
 
 pub fn gpu_box_lines(gpu_id: &String) -> Vec<Line<'static>> {
     let (vram_total, vram_used) = gpu_vram(gpu_id);
