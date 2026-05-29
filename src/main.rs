@@ -6,19 +6,13 @@ mod collectors {
     pub mod mem;
 }
 
-pub mod tui;
-
 use collectors::cpu::*;
 use collectors::gpu::*;
 use collectors::mem::*;
 
-use tui::*;
-
 use std::{
-    char,
     collections::HashMap,
     env,
-    fmt::format,
     fs::{self, exists},
     io::{self, prelude::*},
     path::PathBuf,
@@ -63,11 +57,9 @@ fn main() {
             logging(logging_interval, &gpu_ids[0]);
         }
     } else {
-        match gpu_ids.len() {
-            0 => eprintln!("No GPU detected in config file"),
-            1 => run_tui_single_gpu(&gpu_ids[0]).expect("TUI failed"),
-            _ => run_tui_dual_gpu(&gpu_ids[0], &gpu_ids[1]).expect("TUI failed"),
-        }
+        print_cpu_from_config(&flags);
+        print_mem_from_config(&flags);
+        print_gpu_from_config(&flags, &gpu_ids);
     }
 }
 
