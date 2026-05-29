@@ -45,7 +45,8 @@ Data logging mode saves all the data in a csv file.
 File format that data is saved to is %HH_%MM_%SS___%DD_%MM_%YY.csv
 
 
-Example output for GPU:
+
+## Example output for GPU:
 
 ```
 ❯ r-sysfetch gpu
