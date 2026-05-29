@@ -14,34 +14,23 @@ use collectors::mem::*;
 
 use tui::*;
 
-use ratatui::crossterm::{
-    event::{self, Event, KeyCode},
-    execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-};
-use ratatui::{
-    Terminal,
-    backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
-};
 use std::{
     char,
     collections::HashMap,
     env,
-    fmt::{Write, format},
+    fmt::format,
     fs::{self, exists},
+    io::{self, prelude::*},
     path::PathBuf,
     process::exit,
-    thread, time,
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 fn main() {
     let config_path = get_config_path();
     create_config(&config_path);
-    let Ok((flags, gpu_ids)) = read_config(&config_path) else {
+    let Ok((flags, gpu_ids, logging_interval)) = read_config(&config_path) else {
         eprintln!("Failed to read config");
         return;
     };
@@ -69,6 +58,9 @@ fn main() {
             print_cpu_from_config(&flags);
             print_mem_from_config(&flags);
             print_gpu_from_config(&flags, &gpu_ids);
+        }
+        if arg_count.contains_key(&"s".to_string()) {
+            logging(logging_interval, &gpu_ids[0]);
         }
     } else {
         match gpu_ids.len() {
@@ -150,6 +142,8 @@ gpu_clock_speeds
 
 #gpu=0
 gpu=1
+
+logging_interval=60
 "#;
         fs::write(&config_file, &config_content).ok();
     }
@@ -157,11 +151,11 @@ gpu=1
 
 fn read_config(
     config_file: &PathBuf,
-) -> Result<(HashMap<String, bool>, Vec<String>), std::io::Error> {
+) -> Result<(HashMap<String, bool>, Vec<String>, u64), std::io::Error> {
     let content = fs::read_to_string(config_file)?;
     let mut gpu_ids = Vec::new();
     let mut flags = HashMap::new();
-
+    let mut logging_interval: u64 = 60;
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -171,10 +165,14 @@ fn read_config(
             gpu_ids.push(stripped.to_string());
             continue;
         }
+        if let Some(stripped) = line.strip_prefix("logging_interval=") {
+            logging_interval = stripped.parse().unwrap_or(60);
+            continue;
+        }
         flags.insert(line.to_string(), true);
     }
 
-    Ok((flags, gpu_ids))
+    Ok((flags, gpu_ids, logging_interval))
 }
 
 fn print_cpu_from_config(flags: &HashMap<String, bool>) {
@@ -273,5 +271,44 @@ fn print_gpu_from_config(flags: &HashMap<String, bool>, gpu_ids: &Vec<String>) {
                 }
             }
         }
+    }
+}
+
+fn logging(logging_interval: u64, gpu_id1: &String) {
+    let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let filename = chrono::Local::now()
+        .format("r-sysfetch_%H_%M_%S___%d_%m_%y.csv")
+        .to_string();
+    let path = PathBuf::from(home).join(filename);
+    if !path.exists() {
+        let header = "cpu_usage,cpu_freq,cpu_temp,mem_free,mem_available,swap_free,vram_used,power_used,gpu_temp,core_clock,mem_clock\n";
+        fs::write(&path, header).ok();
+    }
+    loop {
+        let (mem_swap_total, mem_swap_free) = mem_swap_info();
+        let (vram_total, vram_used) = gpu_vram(gpu_id1);
+        let (power_used, power_max) = gpu_power(gpu_id1);
+        let (core_speed, mem_speed) = gpu_clock_speeds(gpu_id1);
+        let row = format!(
+            "{:.2},{:.1},{:.1},{:.1},{:.1},{:.1},{:.2},{},{},{},{}\n",
+            cpu_usage(),
+            cpu_freq(),
+            cpu_temperature() / 1000.0,
+            mem_free(),
+            mem_available(),
+            mem_swap_free,
+            vram_used,
+            power_used,
+            gpu_temp(gpu_id1),
+            core_speed,
+            mem_speed
+        );
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .and_then(|mut f| f.write_all(row.as_bytes()))
+            .ok();
+        thread::sleep(Duration::from_secs(logging_interval));
     }
 }
